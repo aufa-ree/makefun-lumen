@@ -9,7 +9,7 @@ import { EVENT_LEVELUP, EVENT_OVER, EVENT_WIN } from './world.js';
 import { SCREEN_LEVELUP, SCREEN_OVER, SCREEN_PLAY, SCREEN_TITLE } from './render.js';
 
 const START_SECONDS = 4;
-const PLAY_SECONDS = 22;
+const PLAY_SECONDS = 45;
 const LEVELUP_LIMIT_SECONDS = 120;
 const END_LIMIT_SECONDS = 180;
 
@@ -95,8 +95,9 @@ export function stageShot(name, world) {
     const pilot = autopilot(world.state);
     const events = world.step(STEP, pilot.move, pilot.aim, pilot.firing, false);
     world.state.beamOn = pilot.firing;
-    // The play scene ends mid-combat: the beam on, a shadow close enough to burn.
-    if (name === 'play' && pilot.firing && index > 8 / STEP) {
+    // The play scene ends mid-combat in wave 2 or later: the beam on, a shadow
+    // close enough to burn, and more than one kind of shadow on the field.
+    if (name === 'play' && world.state.wave >= 2 && pilot.firing && index > 8 / STEP) {
       let close = false;
       for (const enemy of world.state.enemies) {
         if (!enemy.active) continue;

@@ -55,11 +55,20 @@ export function createWorld(random) {
   for (let index = 0; index < POOL_SIZE; index += 1) {
     particles.push({ active: false, x: 0, y: 0, vx: 0, vy: 0, life: 0, maxLife: 1, color: '#ffffff', size: 3 });
   }
+  // Floating score texts: cosmetic only, they never change the rules.
+  const floaters = [];
+  for (let index = 0; index < 24; index += 1) {
+    floaters.push({ active: false, x: 0, y: 0, life: 0, maxLife: 1, text: '', color: '#ffe9a8', size: 18 });
+  }
   const state = {
     player,
     enemies,
     shards,
     particles,
+    floaters,
+    shake: 0,
+    pulseAt: -10,
+    waveBannerAt: 0,
     wave: 1,
     score: 0,
     kills: 0,
@@ -96,6 +105,10 @@ export function createWorld(random) {
     for (const enemy of enemies) enemy.active = false;
     for (const shard of shards) shard.active = false;
     for (const particle of particles) particle.active = false;
+    for (const floater of floaters) floater.active = false;
+    state.shake = 0;
+    state.pulseAt = -10;
+    state.waveBannerAt = 0;
     state.wave = 1;
     state.score = 0;
     state.kills = 0;
@@ -125,6 +138,22 @@ export function createWorld(random) {
   function freeParticle() {
     for (let index = 0; index < particles.length; index += 1) if (!particles[index].active) return particles[index];
     return null;
+  }
+
+  function spawnFloater(x, y, text, color, size) {
+    for (let index = 0; index < floaters.length; index += 1) {
+      const floater = floaters[index];
+      if (floater.active) continue;
+      floater.active = true;
+      floater.x = x;
+      floater.y = y;
+      floater.maxLife = 0.9;
+      floater.life = floater.maxLife;
+      floater.text = text;
+      floater.color = color;
+      floater.size = size || 18;
+      return;
+    }
   }
 
   function burst(x, y, color, count, speed) {
@@ -195,6 +224,7 @@ export function createWorld(random) {
     state.spawnQueue = queue;
     state.spawnTimer = 0.5;
     state.waveActive = true;
+    state.waveBannerAt = state.elapsed;
   }
 
   function dropShards(enemy) {
@@ -213,6 +243,7 @@ export function createWorld(random) {
     state.kills += 1;
     state.score += enemy.score;
     burst(enemy.x, enemy.y, ENEMY[enemy.kind].color, enemy.boss ? 26 : 10, 160);
+    spawnFloater(enemy.x, enemy.y - enemy.radius - 6, `+${enemy.score}`, '#ffe9a8', enemy.boss ? 26 : 18);
     dropShards(enemy);
     if (enemy.boss) state.boss = null;
   }
@@ -291,6 +322,8 @@ export function createWorld(random) {
     if (pulse && player.pulseOwned && player.pulseLeft === 0) {
       player.pulseLeft = PULSE.cooldown;
       events |= EVENT_PULSE;
+      state.pulseAt = state.elapsed;
+      state.shake = Math.max(state.shake, 9);
       burst(player.x, player.y, '#ffd27a', 30, 320);
       for (const enemy of enemies) {
         if (!enemy.active) continue;
@@ -351,6 +384,7 @@ export function createWorld(random) {
         player.health -= enemy.damage;
         player.hurtLeft = PLAYER.contactCooldown;
         events |= EVENT_HIT;
+        state.shake = Math.max(state.shake, 7);
         burst(player.x, player.y, '#ff5a3c', 8, 120);
         if (player.health <= 0) {
           player.health = 0;
@@ -408,7 +442,7 @@ export function createWorld(random) {
       }
     }
 
-    // Particles drift and fade.
+    // Particles drift and fade; floaters rise and fade; the shake settles.
     for (const particle of particles) {
       if (!particle.active) continue;
       particle.life -= dt;
@@ -421,6 +455,16 @@ export function createWorld(random) {
       particle.vx *= 0.96;
       particle.vy *= 0.96;
     }
+    for (const floater of floaters) {
+      if (!floater.active) continue;
+      floater.life -= dt;
+      if (floater.life <= 0) {
+        floater.active = false;
+        continue;
+      }
+      floater.y -= 36 * dt;
+    }
+    if (state.shake > 0) state.shake = Math.max(0, state.shake - dt * 26);
 
     // The wave ends when its queue is spent and the field is clear.
     if (state.waveActive && state.spawnQueue.length === 0 && aliveCount() === 0) {

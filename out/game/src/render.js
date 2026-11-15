@@ -366,10 +366,12 @@ export function createRenderer(canvas) {
     const player = state.player;
     if (!state.beamOn) return;
     const flick = 0.92 + 0.05 * Math.sin(state.elapsed * 37) + 0.03 * Math.sin(state.elapsed * 61);
+    const ex = player.x + Math.cos(player.aim) * player.beamRange;
+    const ey = player.y + Math.sin(player.aim) * player.beamRange;
     context.save();
     context.globalCompositeOperation = 'lighter';
-    // Outer wash, then a tighter mid cone.
-    for (const layer of [{ a: 0.3, half: 1 }, { a: 0.42, half: 0.72 }]) {
+    // A faint cone wash stays so the damage area still reads.
+    for (const layer of [{ a: 0.14, half: 1 }, { a: 0.2, half: 0.72 }]) {
       const g = context.createRadialGradient(player.x, player.y, 10, player.x, player.y, player.beamRange);
       g.addColorStop(0, `rgba(255, 223, 138, ${layer.a * flick})`);
       g.addColorStop(1, 'rgba(255, 223, 138, 0)');
@@ -380,42 +382,77 @@ export function createRenderer(canvas) {
       context.closePath();
       context.fill();
     }
-    // Hot core.
-    context.strokeStyle = PALETTE.beamCore;
-    context.lineWidth = player.beamWidth;
+    // The laser: layered strokes, hot white heart, glowing amber shell.
+    const ray = [
+      { w: 16, c: 'rgba(255, 150, 40, 0.22)', a: 0.55 },
+      { w: 8, c: PALETTE.beam, a: 0.85 },
+      { w: 3.5, c: PALETTE.beamCore, a: 1 },
+      { w: 1.5, c: '#ffffff', a: 0.95 },
+    ];
+    for (const l of ray) {
+      context.strokeStyle = l.c;
+      context.lineWidth = l.w;
+      context.globalAlpha = l.a * flick;
+      context.beginPath();
+      context.moveTo(player.x, player.y);
+      context.lineTo(ex, ey);
+      context.stroke();
+    }
+    // Muzzle flare at the lantern.
+    const mg = context.createRadialGradient(player.x, player.y, 0, player.x, player.y, 26);
+    mg.addColorStop(0, 'rgba(255, 255, 230, 0.95)');
+    mg.addColorStop(0.4, 'rgba(255, 200, 90, 0.55)');
+    mg.addColorStop(1, 'rgba(255, 200, 90, 0)');
+    context.globalAlpha = flick;
+    context.fillStyle = mg;
+    context.beginPath();
+    context.arc(player.x, player.y, 26, 0, TAU);
+    context.fill();
+    // Impact burst where the laser ends.
+    const ig = context.createRadialGradient(ex, ey, 0, ex, ey, 30);
+    ig.addColorStop(0, 'rgba(255, 255, 240, 0.9)');
+    ig.addColorStop(0.35, 'rgba(255, 190, 80, 0.5)');
+    ig.addColorStop(1, 'rgba(255, 190, 80, 0)');
     context.globalAlpha = 0.9 * flick;
+    context.fillStyle = ig;
     context.beginPath();
-    context.moveTo(player.x, player.y);
-    context.lineTo(player.x + Math.cos(player.aim) * player.beamRange, player.y + Math.sin(player.aim) * player.beamRange);
-    context.stroke();
+    context.arc(ex, ey, 30, 0, TAU);
+    context.fill();
     context.strokeStyle = '#ffffff';
-    context.lineWidth = 2.5;
+    context.lineWidth = 2;
     context.globalAlpha = 0.8 * flick;
-    context.beginPath();
-    context.moveTo(player.x, player.y);
-    context.lineTo(player.x + Math.cos(player.aim) * player.beamRange * 0.92, player.y + Math.sin(player.aim) * player.beamRange * 0.92);
-    context.stroke();
-    // Ember motes drifting down the beam.
+    for (let i = 0; i < 5; i += 1) {
+      const a = player.aim + Math.PI + (i - 2) * 0.5 + Math.sin(state.elapsed * 23 + i) * 0.12;
+      context.beginPath();
+      context.moveTo(ex + Math.cos(a) * 6, ey + Math.sin(a) * 6);
+      context.lineTo(ex + Math.cos(a) * 22, ey + Math.sin(a) * 22);
+      context.stroke();
+    }
+    // Sparks racing down the laser.
     for (const mote of beamMotes) {
-      const dist = ((state.elapsed * 60 + mote.t * player.beamRange) % player.beamRange) + 20;
-      const a = player.aim + mote.off * player.beamHalfAngle * 0.7;
+      const dist = ((state.elapsed * 90 + mote.t * player.beamRange) % player.beamRange) + 20;
+      const a = player.aim + mote.off * player.beamHalfAngle * 0.3;
       const mx = player.x + Math.cos(a) * dist;
       const my = player.y + Math.sin(a) * dist;
-      context.globalAlpha = 0.5 * (1 - dist / player.beamRange);
+      context.globalAlpha = 0.6 * (1 - dist / player.beamRange);
       circle(mx, my, 2, '#ffe9a8');
     }
     context.restore();
     context.globalAlpha = 1;
     if (player.twin) {
+      const tx = player.x + Math.cos(player.twinAngle) * player.beamRange * 0.8;
+      const ty = player.y + Math.sin(player.twinAngle) * player.beamRange * 0.8;
       context.save();
       context.globalCompositeOperation = 'lighter';
-      context.strokeStyle = PALETTE.beam;
-      context.lineWidth = player.beamWidth * 0.7;
-      context.globalAlpha = 0.5;
-      context.beginPath();
-      context.moveTo(player.x, player.y);
-      context.lineTo(player.x + Math.cos(player.twinAngle) * player.beamRange * 0.8, player.y + Math.sin(player.twinAngle) * player.beamRange * 0.8);
-      context.stroke();
+      for (const l of [{ w: 10, c: 'rgba(255, 150, 40, 0.2)', a: 0.5 }, { w: 4, c: PALETTE.beam, a: 0.7 }, { w: 1.5, c: '#ffffff', a: 0.8 }]) {
+        context.strokeStyle = l.c;
+        context.lineWidth = l.w;
+        context.globalAlpha = l.a;
+        context.beginPath();
+        context.moveTo(player.x, player.y);
+        context.lineTo(tx, ty);
+        context.stroke();
+      }
       context.restore();
       context.globalAlpha = 1;
     }
